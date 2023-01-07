@@ -272,6 +272,8 @@ def populate_board(board: list[list]) -> None:
     for i in range(8):
         board[6][i] = Pawn(Position(i, 6), Colour.BLACK)
 
+    board[6][6] = Pawn(Position(6, 6), Colour.WHITE)
+
 
 def view_board(board: list[list[Optional[Piece]]]) -> None:
     print("   ┌───┬───┬───┬───┬───┬───┬───┬───┐")
@@ -298,6 +300,57 @@ def update_piece_data(piece: Piece, move_position: Position) -> None:
     piece.position = Position(move_position.x, move_position.y)
     if isinstance(piece, Pawn):
         piece.max_move = 1
+
+
+def char_to_piece_type(char: str) -> type[Piece]:
+    char = char.upper()
+    match char:
+        case "Q":
+            return Queen
+        case "R":
+            return Rook
+        case "B":
+            return Bishop
+        case "N":
+            return Knight
+        case "P":
+            return Pawn
+        case "K":
+            return King
+
+
+def promote_piece(
+    board: list[list[Optional[Piece]]], move: str, piece: Piece, colour: Colour
+) -> None:
+    PROMOTION_REGEXP = r"=[QRBNqrbn]"
+
+    if piece.position.y != 7 and piece.colour == Colour.WHITE:
+        return
+
+    elif piece.position.y != 0 and piece.colour == Colour.BLACK:
+        return
+
+    promotion_input: Optional[re.Match] = re.search(PROMOTION_REGEXP, move)
+
+    piece_class_type: type[Piece]
+    if promotion_input != None:
+        piece_class_type = char_to_piece_type(promotion_input.group(0)[1])
+
+    else:
+        while True:
+            piece_type_input: str = input("promote to (Q, R, B, N): ")
+
+            if len(piece_type_input) != 1 or piece_type_input.isdigit():
+                continue
+
+            piece_type = char_to_piece_type(piece_type_input)
+
+            if piece_type != Pawn and piece_type != King:
+                piece_class_type = piece_type
+                break
+
+    new_piece = piece_class_type(Position(piece.position.x, piece.position.y), colour)
+    board[piece.position.y][piece.position.x] = new_piece
 
 
 def move_piece(
@@ -366,14 +419,6 @@ def get_piece_position(
 
 def get_piece_type(move: str, move_type: MoveType) -> type[Piece]:
     FILES = ["a", "b", "c", "d", "e", "f", "g", "h"]
-    NOTATION_TO_CLASS_TYPE: dict[str, type[Piece]] = {
-        "P": Pawn,
-        "B": Bishop,
-        "N": Knight,
-        "R": Rook,
-        "Q": Queen,
-        "K": King,
-    }
 
     if move_type == MoveType.CASTLE:
         return King
@@ -383,21 +428,21 @@ def get_piece_type(move: str, move_type: MoveType) -> type[Piece]:
     elif move[0] in FILES:
         return Pawn
     else:
-        return NOTATION_TO_CLASS_TYPE[move[0].upper()]
+        return char_to_piece_type[move[0]]
 
 
 def get_move_type(move: str) -> MoveType:
-    normal_regexp = r"[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8]"
-    promotion_regexp = r"=[QRBNqrbn]"
-    castle_regexp = r"[Oo0](-[Oo0]){1,2}"
+    NORMAL_REGEXP = r"[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8]"
+    PROMOTION_REGEXP = r"=[QRBNqrbn]"
+    CASTLE_REGEXP = r"[Oo0](-[Oo0]){1,2}"
 
-    if re.match(normal_regexp, move, re.IGNORECASE) != None:
-        if re.match(promotion_regexp, move):
+    if re.match(NORMAL_REGEXP, move, re.IGNORECASE) != None:
+        if re.search(PROMOTION_REGEXP, move) != None:
             return MoveType.PROMOTION
         else:
             return MoveType.NORMAL
 
-    elif re.match(castle_regexp, move) != None:
+    elif re.match(CASTLE_REGEXP, move) != None:
         return MoveType.CASTLE
 
     else:
@@ -457,7 +502,6 @@ def game():
     board: list[list[None]] = generate_board()
     populate_board(board)
     view_board(board)
-    # TODO figure out checkmate and end the game
     move_count: int = 0
     player_colour: Colour = Colour.WHITE
     while True:
@@ -500,6 +544,13 @@ def game():
             move_piece(board, piece, move_position)
 
         update_piece_data(piece, move_position)
+
+        if move_type == MoveType.PROMOTION or (
+            piece_type == Pawn and move_position.y in [0, 7]
+        ):
+            promote_piece(board, move, piece, player_colour)
+
+        # TODO look for check or checkmate
 
         view_board(board)
 
